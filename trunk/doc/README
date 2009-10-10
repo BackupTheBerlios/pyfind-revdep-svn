@@ -1,0 +1,48 @@
+pyfind_revdep
+
+This program is a simple utility script to search executable
+programs (directories in PATH environment variable) and binary
+libraries (directories listed in /etc/ld.so.conf and in
+LD_LIBRARY_PATH environment variable), and find if their
+required shared object dependencies are met.
+It stores a log file (in /var/log directory) to remind broken
+files.
+
+The idea behind it has been given to me by taking cue from great
+revdep_rebuild bash script in Gentoo distribution, but this program
+doesn't have any technical similarities with it, in fact my
+implementation is written from scratch and it is coded in python.
+
+My targets in creating it were:
+- minimalistic and non intrusive approach: this program is mainly
+tailored on the Slackware GNU/Linux operating system and it follows
+Slackware way of life ;-) e.g. it does not intend to provide any 
+automatic (re)installation of broken packages and it will modify
+nothing of your filesystem's contents, _you_ are in charge of what
+you want to do.
+- minimal tree of dependencies: I try to use only python standard
+library, as far as I can.
+- simple and straightforward code: as I am an strictly amateur-ish
+programmer, mostly I'm focusing to easeness of code reading and
+maintainability, instead of optimization and speed.
+It surely could be better coded, but I do not deem it as strictly
+necessary, for now.
+
+My first ideal use case is taking note of broken packages after
+(re)building and (re)installation of a new library package from
+repository at SlackBuilds.org (but it can be used elsewhere).
+I've tested it on a Slackware 13.0 (both 32bit and 64bit, both
+stand-alone and in VM).
+
+
+Author: LukenShiro <lukenshiro@ngi.it>
+
+Testing is really appreciated and welcome. If you have bug reports,
+comments or suggestions, please feel free to send me an e-mail.
+
+
+----
+GNU(R) is a registered trademark of the Free Software Foundation.
+Linux(R) is a registered trademark of Linux B. Torvalds.
+Slackware(R) is a registered trademark of Patrick J. Volkerding
+ and Slackware Linux, Inc.

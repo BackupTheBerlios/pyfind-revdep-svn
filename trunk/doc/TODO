@@ -1,0 +1,26 @@
+Some ideas for future development:
+
+* Verify and catch all related exceptions, to avoid
+abnormal terminations.
+(done) * Try a prediction of what packages are behind
+broken files, based on /var/log/packages list
+of installed packages.
+* provide a list of python packages who have to
+be reinstalled to match a new python package
+installation.
+* provide a list of perl packages who have to
+be reinstalled to match a new perl package
+installation.
+* extend compatibility to python 3.x.
+* create unit tests to verify functions behaviour's
+correctness (lower priority).
+* Improve the package prediction, fix known problems
+
+
+-------------------------------------------------
+
+Known problems:
+* Prediction of broken package do not concern packages
+who are not installed yet ("unknown" ones), as I don't have
+a reliable method to have a list of files for each
+package to be built from source (e.g. from SBo slackbuilds).

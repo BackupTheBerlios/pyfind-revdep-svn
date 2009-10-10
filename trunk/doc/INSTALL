@@ -1,0 +1,13 @@
+pyfind_revdep requires at least Python 2.5.x. It doesn't
+support Python 3.x yet.
+
+It depends only on python standard library modules.
+
+To install this distribution, simply run the following
+with root's privileges:
+        python ./setup.py build
+        python ./setup.py install
+
+This program is meant to be used in Slackware GNU/Linux 
+distribution (mainly in latest "stable" version, but it
+should work on previous version, too).
