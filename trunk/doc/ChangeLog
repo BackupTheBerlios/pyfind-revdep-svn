@@ -1,3 +1,6 @@
+SVN
+    Introduced options for help and version, and to enable/disable logfile
+    and package prediction.
 0.2.3 (2009-10-07):
     First public release (with experimental package prediction)
 
