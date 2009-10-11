@@ -24,6 +24,7 @@ import stat
 import re
 import sys
 import subprocess
+import getopt
 
 __version__ = "0.2.3"
 #elfmagic = str(0x7f454c46L)      # ELF magic
@@ -81,12 +82,79 @@ def isexecutable(filename):
         return False
 
 
+def get_env_path():
+    """ Returns PATH directories -> list """
+
+    raw_path_env_var = os.environ.get("PATH")
+    if raw_path_env_var is None:
+        fatal_error("Fatal Error: environment variable $PATH "
+                "doesn't exist.")
+    else:
+        list_path = raw_path_env_var.split(":")
+        unique_list_path = []
+        for aaa in list_path:
+            if aaa not in unique_list_path:
+                if not os.path.islink(aaa):
+                    unique_list_path.append(aaa)
+        return unique_list_path
+
+
+def get_env_ldlib():
+    """ Returns LD_LIBRARY_PATH directories -> list """
+
+    raw_ldlib_env_var = os.environ.get("LD_LIBRARY_PATH")
+    unique_list_ldlib = []
+    if raw_ldlib_env_var:
+        # if env var doesn't exist
+        list_ldlib = raw_ldlib_env_var.split(":")
+        for bbb in list_ldlib:
+            if bbb not in unique_list_ldlib:
+                unique_list_ldlib.append(bbb)
+    return unique_list_ldlib
+
+
+def getversion():
+    """ Print program version """
+    
+    print "pyfind_revdep", "version:", __version__
+
+
+def find_common_files(basedir='.'):
+    """ Find files who are located in a particular directory -> list """
+
+    matching = []
+    for root, dirs, files in os.walk(basedir):
+        for fff in files:
+            matching.append(root + '/' + fff)
+    return matching
+
+
+def get_ldd_exec():
+    """ Returns directory and filename of ldd command -> str """
+
+    okok = False
+    pathlist = get_env_path()
+    filepath = ""
+    for cmd in pathlist:
+        filepath = os.path.join(cmd, "ldd")
+        #print cmd, filepath
+        if os.path.exists(filepath):
+            okok = True
+            break
+    if okok:
+        return filepath
+    else:
+        raise IOError("Fatal Error: executable 'ldd' cannot be found in " \
+                      "$PATH.")
+
+
 def run():
     """ Main routine """
 
     if checkroot():
         if checkpyvers():
             appl = FindRevDep()
+            appl.getoptions()
             appl.print_broken_binfiles()
             appl.print_broken_libfiles()
             appl.print_package_summary()
@@ -102,35 +170,51 @@ class FindRevDep(object):
         self.pkg_install_dir = "/var/log/packages"
         self.ldsoconf = "/etc/ld.so.conf"
         self.logfile = "/var/log/revdep_finder.log"
+        self.dopredict = False
+        self.dologreg = False
 
-    def get_env_path(self):
-        """ Returns PATH directories -> list """
+    def usage(self):
+        """ Print program's available options """
+        
+        print "pyfind_revdep - utility to search broken dependencies files"
+        print "Copyright (C) 2009 LukenShiro <lukenshiro@ngi.it>\n"
+        print "Usage:  pyfind_revdep [options]\n"
+        print "  -p, --predict  ->    Try a prediction of what package is " \
+              "behind broken file(s) (Slackware x86 and x86_64 only)."
+        print "  -l, --log      ->    Write list of broken files in a log " \
+              "as", self.logfile
+        print "  -h, --help     ->    This help file."
+        print "  -V, --version  ->    Print version number."
 
-        raw_path_env_var = os.environ.get("PATH")
-        if raw_path_env_var is None:
-            fatal_error("Fatal Error: environment variable $PATH "
-                  "doesn't exist.")
-        else:
-            list_path = raw_path_env_var.split(":")
-            unique_list_path = []
-            for aaa in list_path:
-                if aaa not in unique_list_path:
-                    if not os.path.islink(aaa):
-                        unique_list_path.append(aaa)
-            return unique_list_path
-
-    def get_env_ldlib(self):
-        """ Returns LD_LIBRARY_PATH directories -> list """
-
-        raw_ldlib_env_var = os.environ.get("LD_LIBRARY_PATH")
-        unique_list_ldlib = []
-        if raw_ldlib_env_var:
-            # if env var doesn't exist
-            list_ldlib = raw_ldlib_env_var.split(":")
-            for bbb in list_ldlib:
-                if bbb not in unique_list_ldlib:
-                    unique_list_ldlib.append(bbb)
-        return unique_list_ldlib
+    def option_unknown(self):
+        """ if an option is not available """
+        
+        print "Option not recognized"
+        self.usage()        
+        
+    def getoptions(self):
+        """ Manage options inserted as command line arguments """
+        
+        try:
+            opts, args = getopt.getopt(sys.argv[1:], "hVpl", \
+                                       ["help", "version", "predict", "log"])
+        except getopt.GetoptError, err:
+            self.option_unknown()
+            sys.exit(2)
+        for optionval, waste in opts:
+            if optionval == "-V":
+                getversion()
+                sys.exit(0)
+            elif optionval in ("-h", "--help"):
+                self.usage()
+                sys.exit(0)
+            elif optionval in ("-p", "--predict"):
+                self.dopredict = True
+            elif optionval in ("-l", "--log"):
+                self.dologreg = True
+            else:
+                self.option_unknown()
+                sys.exit(2)
 
     def get_libdir(self):
         """ Returns directories contained in /etc/ld.so.conf
@@ -140,7 +224,7 @@ class FindRevDep(object):
         handl = open(self.ldsoconf, "r")
         raw_list_libdir = handl.readlines()
         handl.close()
-        raw_list_libdir2 = self.get_env_ldlib()
+        raw_list_libdir2 = get_env_ldlib()
         raw_list_libdir.extend(raw_list_libdir2)
         list_libdir = []
         for ccc in raw_list_libdir:
@@ -151,22 +235,13 @@ class FindRevDep(object):
                         list_libdir.append(ccc)
         return list_libdir
 
-    def find_common_files(self, basedir='.'):
-        """ Find files who are located in a particular directory -> list """
-
-        matching = []
-        for root, dirs, files in os.walk(basedir):
-            for fff in files:
-                matching.append(root + '/' + fff)
-        return matching
-
     def find_nomasked_files(self, forbidpattern, basedir='.'):
         """ Find files who do NOT have a particular pattern in their file
             name -> list
         """
 
         matching = forbidfiles = []
-        files = self.find_common_files(basedir)
+        files = find_common_files(basedir)
         for fff in files:
             for singlpattern in forbidpattern:
                 regexpr = re.compile(singlpattern)
@@ -195,7 +270,7 @@ class FindRevDep(object):
         """ Returns binary executable files -> list """
 
         binaries = []
-        list_path = self.get_env_path()
+        list_path = get_env_path()
         for bindir in list_path:
             newbin = self.find_nomasked_files(['\.py$', '\.sh$', '.csh$',
                                             '\.pl$', '\.rb'], bindir)
@@ -206,27 +281,9 @@ class FindRevDep(object):
                             binaries.append(fname)
         return binaries
 
-    def get_ldd_exec(self):
-        """ Returns directory and filename of ldd command -> str """
-
-        okok = False
-        pathlist = self.get_env_path()
-        filepath = ""
-        for cmd in pathlist:
-            filepath = os.path.join(cmd, "ldd")
-            #print cmd, filepath
-            if os.path.exists(filepath):
-                okok = True
-                break
-        if okok:
-            return filepath
-        else:
-            raise IOError("Fatal Error: executable 'ldd' cannot be found in "
-                          "$PATH.")
-
     def get_ldd_sofiles(self, filename):
         """ Returns standard output of ldd $file -> str """
-        binexec = self.get_ldd_exec()
+        binexec = get_ldd_exec()
         raw_output = subprocess.Popen(binexec+" "+filename+" 2>/dev/null", \
                     shell=True, stdout=subprocess.PIPE).communicate()[0]
         output = raw_output.replace(" =>", "")
@@ -310,7 +367,7 @@ class FindRevDep(object):
         pkginstall = "unknown"
         newbrokenfile = brokenfile[1:]      # no leading slash
         if self.ok_varlogpackages():
-            list_installed_pkgs = self.find_common_files(self.pkg_install_dir)
+            list_installed_pkgs = find_common_files(self.pkg_install_dir)
             for installed in list_installed_pkgs:
                 handl = open(installed, "r")
                 conten_file = handl.readlines()
@@ -340,26 +397,32 @@ class FindRevDep(object):
     def print_broken_binfiles(self):
         """ Print individual messages related to broken binary files """
 
-        self.reset_log()
+        if self.dologreg:
+            self.reset_log()
         list_binary = self.find_bin_files()
         #list_binary = ['/usr/bin/bash', '/usr/bin/a2ps', '/usr/bin/Editra.py']
-        print "State of lacking .so dependencies: binary executables in (",
-        for aaa in self.get_env_path():
-            print " "+aaa,
-        print ")\n"
+        print "State of lacking .so dependencies: binary executables in ",
+        for aaa in get_env_path():
+            print aaa,
+        print "\n"
         for singularfile1 in list_binary:
             listbin = self.get_list_notfound(singularfile1)
             if not listbin:
                 continue
             for singbin in listbin:
-                packagefile1 = self.find_predicted_packages(singularfile1)
-                #singbin
-                pkgonlyname1 = os.path.basename(packagefile1)
-                self.list_packages.append(pkgonlyname1)
-                linetowrite = "broken " + singularfile1 + "  depends on: "+ \
-                              singbin + "  package: " + pkgonlyname1
+                if self.dopredict:
+                    packagefile1 = self.find_predicted_packages(singularfile1)
+                    pkgonlyname1 = os.path.basename(packagefile1)
+                    self.list_packages.append(pkgonlyname1)
+                    linetowrite = "broken %47s  depends on: %15s  package: " \
+                                  "%15s" % (singularfile1, singbin, \
+                                            pkgonlyname1)
+                else:
+                    linetowrite = "broken %47s  depends on: %15s" \
+                                  % (singularfile1, singbin)
                 print linetowrite
-                self.manage_log(linetowrite)
+                if self.dologreg:
+                    self.manage_log(linetowrite)
 
     def print_broken_libfiles(self):
         """ Print individual messages related to broken library files """
@@ -368,46 +431,52 @@ class FindRevDep(object):
         #list_library = ['/usr/lib/pkcs11-spy.so',
         #                '/usr/lib/libxklavier.so.12',
         #                '/usr/lib/libt1.so.5.1.2']
-        print "\n\nState of lacking .so dependencies: shared libraries in (",
+        print "\n\nState of lacking .so dependencies: shared libraries in ",
         for aaa in self.get_libdir():
-            print " "+aaa,
-        print ")\n"
+            print aaa,
+        print "\n"
         for singularfile2 in list_library:
             listlib = self.get_list_notfound(singularfile2)
             if not listlib:
                 continue
             for singlib in listlib:
-                packagefile2 = self.find_predicted_packages(singularfile2)
-                #singlib
-                pkgonlyname2 = os.path.basename(packagefile2)
-                self.list_packages.append(pkgonlyname2)
-                linetowrite = "broken " + singularfile2 + "  depends on: "+ \
-                              singlib + "  package: " + pkgonlyname2
+                if self.dopredict:
+                    packagefile2 = self.find_predicted_packages(singularfile2)
+                    pkgonlyname2 = os.path.basename(packagefile2)
+                    self.list_packages.append(pkgonlyname2)
+                    linetowrite = "broken %47s  depends on: %15s  package: " \
+                                  "%15s" % (singularfile2, singlib, \
+                                            pkgonlyname2)
+                else:
+                    linetowrite = "broken %47s  depends on: %15s" \
+                                  % (singularfile2, singlib)
                 print linetowrite
-                self.manage_log(linetowrite+"\n")
+                if self.dologreg:
+                    self.manage_log(linetowrite+"\n")
 
     def print_package_summary(self):
         """ Print a summary with predicted packages """
 
-        print "\n\nThese are predictable broken packages found:"
-        newlist_pkg = []
-        for package in self.list_packages:
-            if package == "unknown" or package in newlist_pkg:
-                continue
+        if self.dopredict:
+            print "\n\nThese are predictable broken packages found:"
+            newlist_pkg = []
+            for package in self.list_packages:
+                if package == "unknown" or package in newlist_pkg:
+                    continue
+                else:
+                    newlist_pkg.append(package)
+                    print package,
+            if not newlist_pkg:
+                print "\nNo package."
             else:
-                newlist_pkg.append(package)
-                print package,
-        if not newlist_pkg:
-            print "\nNo package."
-        else:
-            print "\n\nFor each package you may have to: " \
-                  "*re-build* it (if it's possible and it has to be " \
-                  "re-compiled against an existing library), or " \
-                  "*install* the missing package who owns the library " \
-                  "(if that is it to be missing), or " \
-                  "*remove* it (if it is obsolete and and not critical), or " \
-                  "*copy/symlink* needed library from existing one (only if" \
-                  "library's ABI/API has not been modified.)"
+                print "\n\nFor each package you may have to: " \
+                      "*re-build* it (if it's possible and it has to be " \
+                      "re-compiled against an existing library), or " \
+                      "*install* the missing package who owns the library " \
+                      "(if that is it to be missing), or " \
+                      "*remove* it (if it is obsolete and and not critical)," \
+                      " or *copy/symlink* needed library from existing one " \
+                      "(only if library's ABI/API has not been modified.)"
 
 
 if __name__ == '__main__':
