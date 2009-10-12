@@ -17,7 +17,7 @@ distutils.core.setup(name = 'pyfind_revdep',
                      platforms = 'POSIX',
                      keywords = 'reverse dependencies',
                      url = 'https://developer.berlios.de/projects/pyfind-revdep/',
-                     scripts=['pyfind_revdep'],
+                     scripts=['pyfindrevdep'],
                      py_modules=['pyfind_revdep'],
                      data_files=[('doc/pyfind_revdep-'+pyfind_revdep.__version__, \
                                   ['doc/ChangeLog', \
