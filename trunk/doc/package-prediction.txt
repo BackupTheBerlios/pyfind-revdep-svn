@@ -1,0 +1,24 @@
+Using "-p" or "-predict" option you can get a prediction
+of which package is needed in order to have all shared
+object dependencies.
+
+This prediction is somewhat precise for Slackware stock
+packages (listed in "slackware"/"slackware64", "patches",
+"extra", "testing" website directories).
+For that to be working you have to:
+- install and use "slackpkg" (a great packaging tool by
+Roberto F. Batista and Evaldo Gardenali);
+- run "slackpkg update";
+- use this script with "-c" or "--cachepkg" option to build
+a cached profile from slackpkg *filelist files.
+
+The same can't be said for other, non-stock, packages
+(e.g. Slackbuilds.org compiled ones, third-part pre-compiled,
+etc..). Alas, at present, I've no reliable method to retrieve
+a list of files of packages who has to be building from
+source or contained in every third-part ones. I warmly accept
+any viable suggestion on that.
+Provisionally, for SlackBuilds.org packages I use a really
+rough method based on checking part of missing library's name
+against SBo script's name: not perfect, though.
+

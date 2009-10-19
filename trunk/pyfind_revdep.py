@@ -25,8 +25,11 @@ import re
 import sys
 import subprocess
 import getopt
+import gzip
+import pickle
 
-__version__ = "0.2.3"
+__version__ = "0.5.0"
+__bdate__ = "20091019"
 #elfmagic = str(0x7f454c46L)      # ELF magic
 
 
@@ -64,7 +67,7 @@ def isbinaryfile(filename):
         header = handl.read(4)
         handl.close()
         valuefnd = header.find("ELF")
-        if valuefnd < 0:
+        if valuefnd == -1:
             # ELF not found in header
             return False
         else:
@@ -116,7 +119,16 @@ def get_env_ldlib():
 def getversion():
     """ Print program version """
     
-    print "pyfind_revdep", "version:", __version__
+    print "pyfind_revdep", "version:", __version__, __bdate__
+
+
+def isslackware():
+    """ Return True is that's Slackware, else False """
+
+    if os.path.exists("/etc/slackware-version"):
+        return True
+    else:
+        return False
 
 
 def find_common_files(basedir='.'):
@@ -147,14 +159,39 @@ def get_ldd_exec():
         raise IOError("Fatal Error: executable 'ldd' cannot be found in " \
                       "$PATH.")
 
+def multi_match_fileext(list_of_extensions_re, operstring):
+    """ Return True if any of extensions present in list are matching
+        else False
+    """
 
-def run():
+    rtnval = False
+    for singext in list_of_extensions_re:
+        if re.search(singext, operstring):
+            rtnval = True
+            break
+    return rtnval
+        
+
+def multi_found_dir(list_of_dir, operstring):
+    """ Return True if any of directories present in list are found 
+        else False
+    """
+
+    rtnval = False
+    for singdir in list_of_dir:
+        if operstring.find(singdir) != -1:
+            rtnval = True
+            break
+    return rtnval
+
+
+def run(args):
     """ Main routine """
 
     if checkroot():
         if checkpyvers():
             appl = FindRevDep()
-            appl.getoptions()
+            appl.getoptions(args)
             appl.print_broken_binfiles()
             appl.print_broken_libfiles()
             appl.print_package_summary()
@@ -169,9 +206,14 @@ class FindRevDep(object):
         self.list_packages = []
         self.pkg_install_dir = "/var/log/packages"
         self.ldsoconf = "/etc/ld.so.conf"
-        self.logfile = "/var/log/revdep_finder.log"
-        self.dopredict = False
-        self.dologreg = False
+        self.logfile = "/var/log/pyfind-revdep.log"
+        self.dbpkg = "/var/lib/pkgdb.pck"   #pkgdb.pck
+        self.dopredict = self.dologreg = False
+        self.slack64_list = "/var/lib/slackpkg/slackware64-filelist.gz"
+        self.slack32_list = "/var/lib/slackpkg/slackware-filelist.gz"
+        self.patches_list = "/var/lib/slackpkg/patches-filelist.gz"
+        self.extra_list = "/var/lib/slackpkg/extra-filelist.gz"
+        self.testing_list = "/var/lib/slackpkg/testing-filelist.gz"
 
     def usage(self):
         """ Print program's available options """
@@ -179,7 +221,7 @@ class FindRevDep(object):
         print "pyfind_revdep - utility to search broken dependencies files"
         print "Copyright (C) 2009 LukenShiro <lukenshiro@ngi.it>\n"
         print "Usage:  pyfind_revdep [options]\n"
-        print "  -p, --predict  ->    Try a prediction of what package is " \
+        print "  -p, --predict  ->    Try a prediction of which package is " \
               "behind broken file(s) (Slackware x86 and x86_64 only)."
         print "  -l, --log      ->    Write list of broken files in a log " \
               "as", self.logfile
@@ -190,14 +232,14 @@ class FindRevDep(object):
         """ if an option is not available """
         
         print "Option not recognized"
-        self.usage()        
+        self.usage()
         
-    def getoptions(self):
+    def getoptions(self, cli_args):
         """ Manage options inserted as command line arguments """
         
         try:
-            opts, args = getopt.getopt(sys.argv[1:], "hVpl", \
-                                       ["help", "version", "predict", "log"])
+            opts, args = getopt.getopt(cli_args, "hVplc", \
+                            ["help", "version", "predict", "log", "cachepkg"])
         except getopt.GetoptError, err:
             self.option_unknown()
             sys.exit(2)
@@ -209,9 +251,17 @@ class FindRevDep(object):
                 self.usage()
                 sys.exit(0)
             elif optionval in ("-p", "--predict"):
-                self.dopredict = True
+                if isslackware():
+                    self.dopredict = True
             elif optionval in ("-l", "--log"):
                 self.dologreg = True
+            elif optionval in ("-c", "--cachepkg"):
+                if isslackware():
+                    self.cache_stock_slackfiles()
+                    sys.exit(0)
+                else:
+                    fatal_error("This is not a Slackware distribution, so" \
+                                "package prediction will not work.")
             else:
                 self.option_unknown()
                 sys.exit(2)
@@ -257,8 +307,8 @@ class FindRevDep(object):
         libraries = []
         list_libdir = self.get_libdir()
         for libdir in list_libdir:
-            newlib = self.find_nomasked_files(['\.a$', '\.la$', '\.dll$'], \
-                                              libdir)
+            newlib = self.find_nomasked_files(['\.a$', '\.la$', '\.dll$' \
+                            '\.tcl$', '\.php$'], libdir)
             for fname in newlib:
                 if os.path.exists(fname):
                     if isbinaryfile(fname):
@@ -273,7 +323,7 @@ class FindRevDep(object):
         list_path = get_env_path()
         for bindir in list_path:
             newbin = self.find_nomasked_files(['\.py$', '\.sh$', '.csh$',
-                                            '\.pl$', '\.rb'], bindir)
+                            '\.pl$', '\.pm$', '\.rb$'], bindir)
             for fname in newbin:
                 if os.path.exists(fname):
                     if isbinaryfile(fname):
@@ -349,6 +399,127 @@ class FindRevDep(object):
                     list_notfound.append(lackingso)
         return list_notfound
 
+    def convert_slackpkg_in_dict(self, filehandler):
+        """ Convert data from a slackpkg file (slackware, patches, extra,
+            testing) into a dict
+        """
+
+        fileinpkg = {}
+        for rowconten in filehandler:
+            newrowcont = rowconten.strip(" \n")
+            newrowcont = newrowcont.replace(" ./", "").replace(" ", " /")
+            listrowconten = newrowcont.split(" ")
+            pkgname = os.path.basename(listrowconten[0].replace(".txz", \
+                                        "").replace(".tgz", ""))
+            # e.g. bsd-games-2.13-x86_64-9
+            listlen = len(listrowconten)
+            newlistrow = []
+            for rowelem in range(1, listlen):
+                #print listrowconten[rowelem]
+                if listrowconten[rowelem].endswith("/"):
+                    # it's a directory, ignore it
+                    continue
+                elif multi_found_dir(["/install/", "/etc/", "/usr/doc/", \
+                            "/usr/share/", "/usr/info/", "/usr/include/", \
+                            "/usr/man/", "/usr/src/", "/var/", \
+                            "/lib/modules/"], listrowconten[rowelem]):
+                    # ignores: installation, config, doc, data, info, 
+                    # man, src, and linux module files
+                    continue
+                elif multi_match_fileext(["\.png$", "\.dtd$", "\.pc$", \
+                            "\.awk$", "\.pl$", "\.py$", "\.pyo$", "\.pyc$", \
+                            "\.spec$", "\.pm$", "\.docbook", "\.html$", \
+                            "\.gif$", "\.a$", "\.desktop$", "\.php$", \
+                            "\.h$", "\.rules$", "\.svgz$", "\.xml$", \
+                            "\.xul$", "\.properties$", "\.css$", "\.jpg$", \
+                            "\.rdf$", "\.ini$", "\.jar$", "\.wav$", "\.mpg$", \
+                            "\.cfg$", "\.la$", "\.gz$", "\.bz2$", "\.cf$", \
+                            "\.txt$", "\.js$", "\.xpt$", "\.ix$", "\.bs$", \
+                            "\.dat$", "\.rws", "\.alias$", "\.multi$", \
+                            "\.conf$", "\.tcl$", "\.msg$", "\.pod$", "\.png$", \
+                            "\.rtf$", "\.tiff$", "\.xpm$", "\.def$", "\.sh$", \
+                            "\.theme$", "\.htm$", "\.rb$", "\.aff$", \
+                            "\.tmpl$", "\.class$"], \
+                            listrowconten[rowelem]):
+                    # ignores some file with uninteresting extension
+                    continue                    
+                else:
+                    newlistrow.append(listrowconten[rowelem])
+            if not newlistrow:
+                # package containing no un-ignored files
+                continue
+
+            fileinpkg[pkgname] = newlistrow
+        return fileinpkg
+            
+        
+    def cache_stock_slackfiles(self):
+        """ Cache a list of files available in stock Slackware  """
+
+        if os.path.exists(self.slack64_list):
+            gzslakhandl = gzip.open(self.slack64_list)
+            dlistslak = self.convert_slackpkg_in_dict(gzslakhandl)
+            gzslakhandl.close()
+        elif os.path.exists(self.slack32_list):
+            gzslakhandl = gzip.open(self.slack64_list)
+            dlistslak = self.convert_slackpkg_in_dict(gzslakhandl)
+            gzslakhandl.close()
+        else:
+            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
+                        "update before using -c option.")
+        if os.path.exists(self.patches_list):
+            gzpatchandl = gzip.open(self.patches_list)
+            dlistpatc = self.convert_slackpkg_in_dict(gzpatchandl)
+            gzpatchandl.close()
+        else:
+            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
+                        "update before using -c option.")            
+        if os.path.exists(self.extra_list):
+            gzextrhandl = gzip.open(self.extra_list)
+            dlistextr = self.convert_slackpkg_in_dict(gzextrhandl)
+            gzextrhandl.close()
+        else:
+            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
+                        "update before using -c option.")
+        if os.path.exists(self.testing_list):
+            gztesthandl = gzip.open(self.testing_list)
+            dlisttest = self.convert_slackpkg_in_dict(gztesthandl)
+            gztesthandl.close()
+        else:
+            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
+                        "update before using -c option.")
+        dlistslak.update(dlistpatc)      
+        dlistslak.update(dlistextr)
+        dlistslak.update(dlisttest)
+        pckfile = open(self.dbpkg, "w")
+        pickle.dump(dlistslak, pckfile, protocol=2)
+        pckfile.close()
+
+    def load_stock_pkgs(self):
+        """ Load packages and their files in memory --> list """
+
+        if os.path.exists(self.dbpkg):
+            pckfile = open(self.dbpkg, "r")
+            dictpkgfil = pickle.load(pckfile)
+            pckfile.close()
+            return dictpkgfil
+        else:
+            fatal_error("Stock package cache file not found, you need to " \
+                        "build it using '-c' or '--cachepkg' option.")        
+
+    def find_stock_package(self, missinglib):
+        """ Return name of stock slackware package whom missinglib belongs
+            to --> str
+        """
+        
+        dictpkgfile = self.load_stock_pkgs()
+        for groupkey in dictpkgfile:
+            for singvalue in dictpkgfile[groupkey]:
+                if singvalue.find(missinglib) != -1:
+                    return groupkey
+        return None
+
+
     def ok_varlogpackages(self):
         """ Returns True if /var/log/packages exists, else False """
 
@@ -411,8 +582,10 @@ class FindRevDep(object):
                 continue
             for singbin in listbin:
                 if self.dopredict:
-                    packagefile1 = self.find_predicted_packages(singularfile1)
-                    pkgonlyname1 = os.path.basename(packagefile1)
+                    packfile1 = self.find_stock_package(singbin)
+                    if packfile1 is None:
+                        packfile1 = self.find_predicted_packages(singularfile1)
+                    pkgonlyname1 = os.path.basename(packfile1)
                     self.list_packages.append(pkgonlyname1)
                     linetowrite = "broken %47s  depends on: %15s  package: " \
                                   "%15s" % (singularfile1, singbin, \
@@ -441,8 +614,10 @@ class FindRevDep(object):
                 continue
             for singlib in listlib:
                 if self.dopredict:
-                    packagefile2 = self.find_predicted_packages(singularfile2)
-                    pkgonlyname2 = os.path.basename(packagefile2)
+                    packfile2 = self.find_stock_package(singlib)
+                    if packfile2 is None:
+                        packfile2 = self.find_predicted_packages(singularfile2)
+                    pkgonlyname2 = os.path.basename(packfile2)
                     self.list_packages.append(pkgonlyname2)
                     linetowrite = "broken %47s  depends on: %15s  package: " \
                                   "%15s" % (singularfile2, singlib, \
@@ -473,11 +648,11 @@ class FindRevDep(object):
                       "*re-build* it (if it's possible and it has to be " \
                       "re-compiled against an existing library), or " \
                       "*install* the missing package who owns the library " \
-                      "(if that is it to be missing), or " \
+                      "(if that's it to be missing), or " \
                       "*remove* it (if it is obsolete and and not critical)," \
                       " or *copy/symlink* needed library from existing one " \
                       "(only if library's ABI/API has not been modified.)"
 
 
 if __name__ == '__main__':
-    run()
+    run(sys.argv[1:])

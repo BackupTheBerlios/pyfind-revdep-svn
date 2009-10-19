@@ -1,8 +1,9 @@
-SVN
+0.2.4 (2009-10-15):
     Introduced options for help and version, and to enable/disable logfile
      and package prediction.
-    Executable pyfind_revdep has changed its name to avoid confusion with
-     main module. 
+    Executable pyfind_revdep has changed its name in pyfindrevdep to avoid
+     confusion with the main module (if you are upgrading from a previous
+     version, you would want to erase "pyfind_revdep" file.
 
 0.2.3 (2009-10-07):
     First public release (with experimental package prediction)

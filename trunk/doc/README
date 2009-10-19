@@ -5,8 +5,8 @@ programs (directories in PATH environment variable) and binary
 libraries (directories listed in /etc/ld.so.conf and in
 LD_LIBRARY_PATH environment variable), and find if their
 required shared object dependencies are met.
-It stores a log file (in /var/log directory) to remind broken
-files.
+Using "-l" or "--log" option it can store a log file (in
+/var/log directory) to remind broken files.
 
 The idea behind it has been given to me by taking cue from great
 revdep_rebuild bash script in Gentoo distribution, but this program
@@ -22,7 +22,7 @@ nothing of your filesystem's contents, _you_ are in charge of what
 you want to do.
 - minimal tree of dependencies: I try to use only python standard
 library, as far as I can.
-- simple and straightforward code: as I am an strictly amateur-ish
+- simple and straightforward code: as I am a somewhat amateur-ish
 programmer, mostly I'm focusing to easeness of code reading and
 maintainability, instead of optimization and speed.
 It surely could be better coded, but I do not deem it as strictly
