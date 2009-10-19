@@ -461,7 +461,7 @@ class FindRevDep(object):
             dlistslak = self.convert_slackpkg_in_dict(gzslakhandl)
             gzslakhandl.close()
         elif os.path.exists(self.slack32_list):
-            gzslakhandl = gzip.open(self.slack64_list)
+            gzslakhandl = gzip.open(self.slack32_list)
             dlistslak = self.convert_slackpkg_in_dict(gzslakhandl)
             gzslakhandl.close()
         else:
