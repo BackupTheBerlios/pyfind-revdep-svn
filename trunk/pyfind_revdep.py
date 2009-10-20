@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding : iso-8859-1 -*-
 """
-    pyfind_revdep - find broken binary executables and libraries who have
-    missing shared object libraries.
+    pyfind_revdep - finds broken binary executables and libraries who have
+    broken dependencies such as missing shared object libraries.
 
     Copyright (C) 2009  LukenShiro <lukenshiro@ngi.it>
 
@@ -28,27 +28,28 @@ import getopt
 import gzip
 import pickle
 
-__version__ = "0.5.0"
-__bdate__ = "20091019"
+__version__ = "0.5.1"
+__bdate__ = "20091020"
 #elfmagic = str(0x7f454c46L)      # ELF magic
 
 
 def fatal_error(msg):
-    """ Display fatal error message and exits """
+    """ Displays fatal error message and exits """
     print msg
     sys.exit(1)
 
 
 def checkroot():
-    """ Verify if this script has been executed as root  """
+    """ Verifies if this script has been executed as root  """
 
     if os.getuid() != 0:
-        fatal_error("You need root privileges to execute this program!")
+        fatal_error("This program cannot be used as a user.\n" \
+                    "You need root privileges to execute it!")
     return True
 
 
 def checkpyvers():
-    """ Verify if we are using the correct Python version """
+    """ Verifies if we are using a correct Python version """
 
     if sys.version_info < (2, 5, 0) or sys.version_info >= (3, 0, 0):
         fatal_error("This program requires Python version 2.5.0 or"
@@ -57,7 +58,7 @@ def checkpyvers():
 
 
 def isbinaryfile(filename):
-    """ Returns True if it is a binary (elf) file, else False """
+    """ Returns True if 'filename' is a binary (elf) file, else False """
 
     fsize = os.path.getsize(filename)
     if fsize < 4:   # it doesn't have an header
@@ -75,7 +76,7 @@ def isbinaryfile(filename):
 
 
 def isexecutable(filename):
-    """ Returns True if it is an executable (+x) file, else False """
+    """ Returns True if 'filename' is an executable (+x) file, else False """
 
     statist = os.stat(filename)
     mode = statist[stat.ST_MODE]
@@ -117,13 +118,13 @@ def get_env_ldlib():
 
 
 def getversion():
-    """ Print program version """
+    """ Prints program version """
     
     print "pyfind_revdep", "version:", __version__, __bdate__
 
 
 def isslackware():
-    """ Return True is that's Slackware, else False """
+    """ Returns True if we are on Slackware, else False """
 
     if os.path.exists("/etc/slackware-version"):
         return True
@@ -132,7 +133,7 @@ def isslackware():
 
 
 def find_common_files(basedir='.'):
-    """ Find files who are located in a particular directory -> list """
+    """ Finds files who are located in 'basedir' directory -> list """
 
     matching = []
     for root, dirs, files in os.walk(basedir):
@@ -156,12 +157,11 @@ def get_ldd_exec():
     if okok:
         return filepath
     else:
-        raise IOError("Fatal Error: executable 'ldd' cannot be found in " \
-                      "$PATH.")
+        fatal_error("Executable 'ldd' cannot be found in $PATH.")
 
 def multi_match_fileext(list_of_extensions_re, operstring):
-    """ Return True if any of extensions present in list are matching
-        else False
+    """ Returns True if any of extensions present in 'list_of_extensions_re'
+        are matching 'operstring' contents, else False
     """
 
     rtnval = False
@@ -173,8 +173,8 @@ def multi_match_fileext(list_of_extensions_re, operstring):
         
 
 def multi_found_dir(list_of_dir, operstring):
-    """ Return True if any of directories present in list are found 
-        else False
+    """ Returns True if any of directories present in 'list_of_dir' are found
+        in 'operstring' contents, else False
     """
 
     rtnval = False
@@ -216,7 +216,7 @@ class FindRevDep(object):
         self.testing_list = "/var/lib/slackpkg/testing-filelist.gz"
 
     def usage(self):
-        """ Print program's available options """
+        """ Prints program's available options """
         
         print "pyfind_revdep - utility to search broken dependencies files"
         print "Copyright (C) 2009 LukenShiro <lukenshiro@ngi.it>\n"
@@ -229,13 +229,13 @@ class FindRevDep(object):
         print "  -V, --version  ->    Print version number."
 
     def option_unknown(self):
-        """ if an option is not available """
+        """ Prints usage if an option is not available """
         
         print "Option not recognized"
         self.usage()
         
     def getoptions(self, cli_args):
-        """ Manage options inserted as command line arguments """
+        """ Manages options inserted as command line arguments """
         
         try:
             opts, args = getopt.getopt(cli_args, "hVplc", \
@@ -270,8 +270,8 @@ class FindRevDep(object):
                 sys.exit(2)
 
     def get_libdir(self):
-        """ Returns directories contained in /etc/ld.so.conf
-            and LD_LIBRARY_PATH -> list.
+        """ Returns directories contained in /etc/ld.so.conf and
+            LD_LIBRARY_PATH -> list.
         """
 
         handl = open(self.ldsoconf, "r")
@@ -289,8 +289,8 @@ class FindRevDep(object):
         return list_libdir
 
     def find_nomasked_files(self, forbidpattern, basedir='.'):
-        """ Find files who do NOT have a particular pattern in their file
-            name -> list
+        """ Finds files who do NOT have 'forbidpattern' in their file
+            name starting from 'basedir' -> list
         """
 
         matching = forbidfiles = []
@@ -335,7 +335,7 @@ class FindRevDep(object):
         return binaries
 
     def get_ldd_sofiles(self, filename):
-        """ Returns standard output of ldd $file -> str """
+        """ Returns standard output of ldd 'filename' -> str """
         binexec = get_ldd_exec()
         raw_output = subprocess.Popen(binexec+" "+filename+" 2>/dev/null", \
                     shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -403,8 +403,8 @@ class FindRevDep(object):
         return list_notfound
 
     def convert_slackpkg_in_dict(self, filehandler):
-        """ Convert data from a slackpkg file (slackware, patches, extra,
-            testing) into a dict
+        """ Converts data from a slackpkg file (slackware, patches, extra,
+            testing)-filelist into a dict
         """
 
         fileinpkg = {}
@@ -457,7 +457,7 @@ class FindRevDep(object):
             
         
     def save_cache_stock_slackfiles(self):
-        """ Cache a list of files available in stock Slackware  """
+        """ Creates a cache of files available in stock Slackware  """
 
         if os.path.exists(self.slack64_list):
             gzslakhandl = gzip.open(self.slack64_list)
@@ -499,7 +499,7 @@ class FindRevDep(object):
         pckfile.close()
 
     def load_stock_pkgs(self):
-        """ Load packages and their files in memory --> list """
+        """ Loads packages and their files in memory --> list """
 
         if os.path.exists(self.dbpkg):
             pckfile = open(self.dbpkg, "rb")
@@ -511,7 +511,7 @@ class FindRevDep(object):
                         "build it using '-c' or '--cachepkg' option.")        
 
     def find_stock_package(self, missinglib):
-        """ Return name of stock slackware package whom missinglib belongs
+        """ Returns name of stock slackware package whom missinglib belongs
             to --> str
         """
         
@@ -531,7 +531,7 @@ class FindRevDep(object):
             return False
 
     def find_similar_solib(self, solib):
-        """ Return if an already existing shared object library has a name
+        """ Returns if an already existing shared object library has a name
             similar to a missing library. BROKEN
         """
 
@@ -570,7 +570,7 @@ class FindRevDep(object):
 
     def get_predicted_pkgname(self, brokenfile, brokendep):
         """ Returns basename of package who has to be rebuilt or
-            installed
+            installed.
         """
         
         slkpackagename1 = self.find_stock_package(brokenfile)
@@ -588,7 +588,7 @@ class FindRevDep(object):
         
 
     def reset_log(self):
-        """ Erase the log file and re-create it"""
+        """ Erases the log file and re-create it"""
 
         if os.path.exists(self.logfile):
             os.unlink(self.logfile)
@@ -596,14 +596,14 @@ class FindRevDep(object):
         logf.close()
 
     def manage_log(self, writcontents):
-        """ Manage the log file, and write contents to it """
+        """ Manages the log file, and writes contents to it """
 
         logf = open(self.logfile, "a+")
         logf.write(writcontents)
         logf.close()
 
     def print_broken_binfiles(self):
-        """ Print individual messages related to broken binary files """
+        """ Prints individual messages related to broken binary files """
 
         if self.dologreg:
             self.reset_log()
@@ -629,7 +629,7 @@ class FindRevDep(object):
                     self.manage_log(linetowrite+"\n")
 
     def print_broken_libfiles(self):
-        """ Print individual messages related to broken library files """
+        """ Prints individual messages related to broken library files """
 
         list_library = self.find_lib_files()
         #list_library = ['/usr/lib/pkcs11-spy.so',
@@ -655,7 +655,7 @@ class FindRevDep(object):
                     self.manage_log(linetowrite+"\n")
 
     def print_package_summary(self):
-        """ Print a summary with predicted packages """
+        """ Prints a summary with predicted packages """
 
         if self.dopredict:
             print "\n\nThese are predictable broken packages found:"
