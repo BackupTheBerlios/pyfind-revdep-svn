@@ -626,7 +626,7 @@ class FindRevDep(object):
                                   % (singularfile1, singbin)
                 print linetowrite
                 if self.dologreg:
-                    self.manage_log(linetowrite)
+                    self.manage_log(linetowrite+"\n")
 
     def print_broken_libfiles(self):
         """ Print individual messages related to broken library files """
@@ -678,7 +678,8 @@ class FindRevDep(object):
                       " or *copy/symlink* needed library from existing one " \
                       "(only if library's ABI/API has not been modified.)"
                 if self.dologreg:
-                    self.manage_log(newlist_pkg+"\n")
+                    self.manage_log("Predicted packages:\n" + \
+                                    "".join(newlist_pkg)+"\n")
 
 
 if __name__ == '__main__':
