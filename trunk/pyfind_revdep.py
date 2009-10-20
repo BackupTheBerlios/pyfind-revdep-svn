@@ -253,15 +253,18 @@ class FindRevDep(object):
             elif optionval in ("-p", "--predict"):
                 if isslackware():
                     self.dopredict = True
+                else:
+                    fatal_error("This is not a Slackware distribution, so" \
+                                " package prediction will not work.")
             elif optionval in ("-l", "--log"):
                 self.dologreg = True
             elif optionval in ("-c", "--cachepkg"):
                 if isslackware():
-                    self.cache_stock_slackfiles()
+                    self.save_cache_stock_slackfiles()
                     sys.exit(0)
                 else:
                     fatal_error("This is not a Slackware distribution, so" \
-                                "package prediction will not work.")
+                                " package prediction will not work.")
             else:
                 self.option_unknown()
                 sys.exit(2)
@@ -392,7 +395,7 @@ class FindRevDep(object):
             return ""
         for ccc in range(0, len(list_solibs)):
             if (list_solibs[ccc][1]).startswith("not"):
-                # not found                           
+                # lib "not found"
                 lackingso = list_solibs[ccc][0]
                 if lackingso not in list_notfound:
                     # to prevent same .so repetitions
@@ -453,7 +456,7 @@ class FindRevDep(object):
         return fileinpkg
             
         
-    def cache_stock_slackfiles(self):
+    def save_cache_stock_slackfiles(self):
         """ Cache a list of files available in stock Slackware  """
 
         if os.path.exists(self.slack64_list):
@@ -466,32 +469,32 @@ class FindRevDep(object):
             gzslakhandl.close()
         else:
             fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using -c option.")
+                        "update before using '-c' or '--cachepkg' option.")
         if os.path.exists(self.patches_list):
             gzpatchandl = gzip.open(self.patches_list)
             dlistpatc = self.convert_slackpkg_in_dict(gzpatchandl)
             gzpatchandl.close()
         else:
             fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using -c option.")            
+                        "update before using '-c' or '--cachepkg' option.")            
         if os.path.exists(self.extra_list):
             gzextrhandl = gzip.open(self.extra_list)
             dlistextr = self.convert_slackpkg_in_dict(gzextrhandl)
             gzextrhandl.close()
         else:
             fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using -c option.")
+                        "update before using '-c' or '--cachepkg' option.")
         if os.path.exists(self.testing_list):
             gztesthandl = gzip.open(self.testing_list)
             dlisttest = self.convert_slackpkg_in_dict(gztesthandl)
             gztesthandl.close()
         else:
             fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using -c option.")
+                        "update before using '-c' or '--cachepkg' option.")
         dlistslak.update(dlistpatc)      
         dlistslak.update(dlistextr)
         dlistslak.update(dlisttest)
-        pckfile = open(self.dbpkg, "w")
+        pckfile = open(self.dbpkg, "wb")
         pickle.dump(dlistslak, pckfile, protocol=2)
         pckfile.close()
 
@@ -499,7 +502,7 @@ class FindRevDep(object):
         """ Load packages and their files in memory --> list """
 
         if os.path.exists(self.dbpkg):
-            pckfile = open(self.dbpkg, "r")
+            pckfile = open(self.dbpkg, "rb")
             dictpkgfil = pickle.load(pckfile)
             pckfile.close()
             return dictpkgfil
@@ -519,7 +522,6 @@ class FindRevDep(object):
                     return groupkey
         return None
 
-
     def ok_varlogpackages(self):
         """ Returns True if /var/log/packages exists, else False """
 
@@ -528,7 +530,23 @@ class FindRevDep(object):
         else:
             return False
 
-    def find_predicted_packages(self, brokenfile):
+    def find_similar_solib(self, solib):
+        """ Return if an already existing shared object library has a name
+            similar to a missing library. BROKEN
+        """
+
+        list_of_solibs = self.find_lib_files()
+        treated_solib = solib.split(".so.")[0]+".so."
+        # libfoo.so.1.2.3 -> libfoo.so.
+        for singlib in list_of_solibs:
+            if not os.path.islink(singlib):
+                # ignore symlinks
+                if singlib.find(treated_solib) != -1:
+                    return True
+        return False
+              
+        
+    def find_other_package(self, brokenfile):
         """ Returns possible package name whose file(s) is/are broken,
             else 'unknown'
             FIXME: routine catch only first package (problem if a file
@@ -549,6 +567,25 @@ class FindRevDep(object):
                         pkginstall = installed
                         break
         return pkginstall
+
+    def get_predicted_pkgname(self, brokenfile, brokendep):
+        """ Returns basename of package who has to be rebuilt or
+            installed
+        """
+        
+        slkpackagename1 = self.find_stock_package(brokenfile)
+        if slkpackagename1 is not None:
+            # if it's a stock slackware package
+            slkpackagename2 = self.find_stock_package(brokendep)
+            return os.path.basename(slkpackagename2)
+            # package is missing dependency lib
+        temp = 1
+        if temp:
+            pass
+        othpackagename = self.find_other_package(brokenfile)
+        return os.path.basename(othpackagename)
+        # package is broken dependency lib
+        
 
     def reset_log(self):
         """ Erase the log file and re-create it"""
@@ -582,16 +619,10 @@ class FindRevDep(object):
                 continue
             for singbin in listbin:
                 if self.dopredict:
-                    packfile1 = self.find_stock_package(singbin)
-                    if packfile1 is None:
-                        packfile1 = self.find_predicted_packages(singularfile1)
-                    pkgonlyname1 = os.path.basename(packfile1)
+                    pkgonlyname1 = self.get_predicted_pkgname(singularfile1, \
+                                                              singbin)
                     self.list_packages.append(pkgonlyname1)
-                    linetowrite = "broken %47s  depends on: %15s  package: " \
-                                  "%15s" % (singularfile1, singbin, \
-                                            pkgonlyname1)
-                else:
-                    linetowrite = "broken %47s  depends on: %15s" \
+                linetowrite = "broken %47s  depends on: %15s" \
                                   % (singularfile1, singbin)
                 print linetowrite
                 if self.dologreg:
@@ -614,16 +645,10 @@ class FindRevDep(object):
                 continue
             for singlib in listlib:
                 if self.dopredict:
-                    packfile2 = self.find_stock_package(singlib)
-                    if packfile2 is None:
-                        packfile2 = self.find_predicted_packages(singularfile2)
-                    pkgonlyname2 = os.path.basename(packfile2)
+                    pkgonlyname2 = self.get_predicted_pkgname(singularfile2, \
+                                                              singlib)
                     self.list_packages.append(pkgonlyname2)
-                    linetowrite = "broken %47s  depends on: %15s  package: " \
-                                  "%15s" % (singularfile2, singlib, \
-                                            pkgonlyname2)
-                else:
-                    linetowrite = "broken %47s  depends on: %15s" \
+                linetowrite = "broken %47s  depends on: %15s" \
                                   % (singularfile2, singlib)
                 print linetowrite
                 if self.dologreg:
@@ -652,6 +677,8 @@ class FindRevDep(object):
                       "*remove* it (if it is obsolete and and not critical)," \
                       " or *copy/symlink* needed library from existing one " \
                       "(only if library's ABI/API has not been modified.)"
+                if self.dologreg:
+                    self.manage_log(newlist_pkg+"\n")
 
 
 if __name__ == '__main__':
