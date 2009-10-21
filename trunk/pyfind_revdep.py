@@ -29,7 +29,7 @@ import gzip
 import pickle
 
 __version__ = "0.5.1"
-__bdate__ = "20091020"
+__bdate__ = "20091021"
 #elfmagic = str(0x7f454c46L)      # ELF magic
 
 
@@ -207,13 +207,16 @@ class FindRevDep(object):
         self.pkg_install_dir = "/var/log/packages"
         self.ldsoconf = "/etc/ld.so.conf"
         self.logfile = "/var/log/pyfind-revdep.log"
-        self.dbpkg = "/var/lib/pkgdb.pck"   #pkgdb.pck
+        self.dbdir = "/var/lib/pyfind-revdep"
+        self.slkdb = "slkdb.pck"
+        self.sbodb = "sbodb.pck"
         self.dopredict = self.dologreg = False
         self.slack64_list = "/var/lib/slackpkg/slackware64-filelist.gz"
         self.slack32_list = "/var/lib/slackpkg/slackware-filelist.gz"
         self.patches_list = "/var/lib/slackpkg/patches-filelist.gz"
         self.extra_list = "/var/lib/slackpkg/extra-filelist.gz"
         self.testing_list = "/var/lib/slackpkg/testing-filelist.gz"
+        self.sbopkg_dir = "/var/lib/sbopkg/SBo/13.0"
 
     def usage(self):
         """ Prints program's available options """
@@ -261,6 +264,7 @@ class FindRevDep(object):
             elif optionval in ("-c", "--cachepkg"):
                 if isslackware():
                     self.save_cache_stock_slackfiles()
+                    self.save_cache_sbofiles()
                     sys.exit(0)
                 else:
                     fatal_error("This is not a Slackware distribution, so" \
@@ -468,41 +472,47 @@ class FindRevDep(object):
             dlistslak = self.convert_slackpkg_in_dict(gzslakhandl)
             gzslakhandl.close()
         else:
-            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using '-c' or '--cachepkg' option.")
+            fatal_error("Files from slackpkg are not found, you must run "
+                        "'slackpkg update' before using '-c' or '--cachepkg'" \
+                        " option.")
         if os.path.exists(self.patches_list):
             gzpatchandl = gzip.open(self.patches_list)
             dlistpatc = self.convert_slackpkg_in_dict(gzpatchandl)
             gzpatchandl.close()
         else:
-            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using '-c' or '--cachepkg' option.")            
+            fatal_error("Files from slackpkg are not found, you must run "
+                        "'slackpkg update' before using '-c' or '--cachepkg'" \
+                        " option.")
         if os.path.exists(self.extra_list):
             gzextrhandl = gzip.open(self.extra_list)
             dlistextr = self.convert_slackpkg_in_dict(gzextrhandl)
             gzextrhandl.close()
         else:
-            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using '-c' or '--cachepkg' option.")
+            fatal_error("Files from slackpkg are not found, you must run "
+                        "'slackpkg update' before using '-c' or '--cachepkg'" \
+                        " option.")
         if os.path.exists(self.testing_list):
             gztesthandl = gzip.open(self.testing_list)
             dlisttest = self.convert_slackpkg_in_dict(gztesthandl)
             gztesthandl.close()
         else:
-            fatal_error("Files from slackpkg are not found, you must run slackpkg" \
-                        "update before using '-c' or '--cachepkg' option.")
+            fatal_error("Files from slackpkg are not found, you must run "
+                        "'slackpkg update' before using '-c' or '--cachepkg'" \
+                        " option.")
         dlistslak.update(dlistpatc)      
         dlistslak.update(dlistextr)
         dlistslak.update(dlisttest)
-        pckfile = open(self.dbpkg, "wb")
+        if not os.path.exists(self.dbdir):
+            os.mkdir(self.dbdir)
+        pckfile = open(os.path.join(self.dbdir, self.slkdb), "wb")
         pickle.dump(dlistslak, pckfile, protocol=2)
         pckfile.close()
 
     def load_stock_pkgs(self):
-        """ Loads packages and their files in memory --> list """
+        """ Loads stock packages and their files in memory --> list """
 
-        if os.path.exists(self.dbpkg):
-            pckfile = open(self.dbpkg, "rb")
+        if os.path.exists(os.path.join(self.dbdir, self.slkdb)):
+            pckfile = open(os.path.join(self.dbdir, self.slkdb), "rb")
             dictpkgfil = pickle.load(pckfile)
             pckfile.close()
             return dictpkgfil
@@ -522,6 +532,54 @@ class FindRevDep(object):
                     return groupkey
         return None
 
+    def convert_sbopkgdirs_in_list(self):
+        """ Converts data from sbopkg directories into a list
+        """
+
+        if os.path.exists(self.sbopkg_dir):
+            list_of_sbopackage = []
+            sbo_categ_dirlist = os.listdir(self.sbopkg_dir)
+            for categ_dir in sbo_categ_dirlist:
+                path_categ_dir = os.path.join(self.sbopkg_dir, categ_dir)
+                if os.path.isdir(path_categ_dir):
+                    # if it's a real directory
+                    sbo_pkf_dirlist = os.listdir(path_categ_dir)
+                    for sbopkf in sbo_pkf_dirlist:
+                        path_sbopkg_dir = os.path.join(path_categ_dir, sbopkf)
+                        if os.path.isdir(path_sbopkg_dir):
+                            # if it's a real directory
+                            list_of_sbopackage.append(sbopkf)
+            return list_of_sbopackage
+        else:
+            fatal_error("Files from sbopkg are not found, you must run " \
+                        "'sbopkg -r' before using '-c' or '--cachepkg' " \
+                        "option.")
+
+    def save_cache_sbofiles(self):
+        """ Creates a cache of package names available on SlackBuilds.org
+            using sbopkg directory layout
+        """
+
+        if not os.path.exists(self.dbdir):
+            os.mkdir(self.dbdir)
+        pckfile = open(os.path.join(self.dbdir, self.slkdb), "wb")
+        dlistsbopkg = self.convert_sbopkgdirs_in_list()
+        pickle.dump(dlistsbopkg, pckfile, protocol=2)
+        pckfile.close()
+
+    def load_sbo_pkgs(self):
+        """ Loads SlackBuilds.org packages in memory --> list """
+
+        if os.path.exists(os.path.join(self.dbdir, self.sbodb)):
+            pckfile = open(os.path.join(self.dbdir, self.sbodb), "rb")
+            listpkgfil = pickle.load(pckfile)
+            pckfile.close()
+            return listpkgfil
+        else:
+            fatal_error("SBo package cache file not found, you need to " \
+                        "build it using '-c' or '--cachepkg' option.")        
+
+
     def ok_varlogpackages(self):
         """ Returns True if /var/log/packages exists, else False """
 
@@ -536,8 +594,8 @@ class FindRevDep(object):
         """
 
         list_of_solibs = self.find_lib_files()
-        treated_solib = solib.split(".so.")[0]+".so."
-        # libfoo.so.1.2.3 -> libfoo.so.
+        treated_solib = solib.split(".so.")[0]
+        # libfoo.so.1.2.3 -> libfoo
         for singlib in list_of_solibs:
             if not os.path.islink(singlib):
                 # ignore symlinks
@@ -584,7 +642,7 @@ class FindRevDep(object):
             pass
         othpackagename = self.find_other_package(brokenfile)
         return os.path.basename(othpackagename)
-        # package is broken dependency lib
+        # package is broken dependency bin/lib
         
 
     def reset_log(self):
@@ -608,7 +666,6 @@ class FindRevDep(object):
         if self.dologreg:
             self.reset_log()
         list_binary = self.find_bin_files()
-        #list_binary = ['/usr/bin/bash', '/usr/bin/a2ps', '/usr/bin/Editra.py']
         print "State of lacking .so dependencies: binary executables in ",
         for aaa in get_env_path():
             print aaa,
@@ -622,7 +679,7 @@ class FindRevDep(object):
                     pkgonlyname1 = self.get_predicted_pkgname(singularfile1, \
                                                               singbin)
                     self.list_packages.append(pkgonlyname1)
-                linetowrite = "broken %47s  depends on: %15s" \
+                linetowrite = "broken %40s  depends on: %15s" \
                                   % (singularfile1, singbin)
                 print linetowrite
                 if self.dologreg:
@@ -632,9 +689,6 @@ class FindRevDep(object):
         """ Prints individual messages related to broken library files """
 
         list_library = self.find_lib_files()
-        #list_library = ['/usr/lib/pkcs11-spy.so',
-        #                '/usr/lib/libxklavier.so.12',
-        #                '/usr/lib/libt1.so.5.1.2']
         print "\n\nState of lacking .so dependencies: shared libraries in ",
         for aaa in self.get_libdir():
             print aaa,
@@ -648,7 +702,7 @@ class FindRevDep(object):
                     pkgonlyname2 = self.get_predicted_pkgname(singularfile2, \
                                                               singlib)
                     self.list_packages.append(pkgonlyname2)
-                linetowrite = "broken %47s  depends on: %15s" \
+                linetowrite = "broken %40s  depends on: %15s" \
                                   % (singularfile2, singlib)
                 print linetowrite
                 if self.dologreg:
@@ -678,7 +732,7 @@ class FindRevDep(object):
                       " or *copy/symlink* needed library from existing one " \
                       "(only if library's ABI/API has not been modified.)"
                 if self.dologreg:
-                    self.manage_log("Predicted packages:\n" + \
+                    self.manage_log("\nPredicted packages:\n" + \
                                     "".join(newlist_pkg)+"\n")
 
 
