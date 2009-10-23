@@ -18,7 +18,11 @@ etc..). Alas, at present, I've no reliable method to retrieve
 a list of files of packages who has to be building from
 source or contained in every third-part ones. I warmly accept
 any viable suggestion on that.
-Provisionally, for SlackBuilds.org packages I use a really
-rough method based on checking part of missing library's name
-against SBo script's name: not perfect, though.
+
+At the moment, for SlackBuilds.org packages I use a really
+experimental/not so reliable method based on checking part
+of missing library's name against SBo script's name.
+You need to:
+- install and use "sbopkg" (a great tool by Chess Griffin);
+- run "sbopkg -r", to do the rsync of SBo packages.
 
