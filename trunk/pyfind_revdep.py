@@ -123,15 +123,6 @@ def getversion():
     print "pyfind_revdep", "version:", __version__, __bdate__
 
 
-def isslackware():
-    """ Returns True if we are on Slackware, else False """
-
-    if os.path.exists("/etc/slackware-version"):
-        return True
-    else:
-        return False
-
-
 def find_common_files(basedir='.'):
     """ Finds files who are located in 'basedir' directory -> list """
 
@@ -204,6 +195,7 @@ class FindRevDep(object):
 
     def __init__(self):
         self.list_packages = []
+        self.slackdistro = "/etc/slackware-version"
         self.pkg_install_dir = "/var/log/packages"
         self.ldsoconf = "/etc/ld.so.conf"
         self.logfile = "/var/log/pyfind-revdep.log"
@@ -254,7 +246,7 @@ class FindRevDep(object):
                 self.usage()
                 sys.exit(0)
             elif optionval in ("-p", "--predict"):
-                if isslackware():
+                if self.isslackware():
                     self.dopredict = True
                 else:
                     fatal_error("This is not a Slackware distribution, so" \
@@ -262,7 +254,7 @@ class FindRevDep(object):
             elif optionval in ("-l", "--log"):
                 self.dologreg = True
             elif optionval in ("-c", "--cachepkg"):
-                if isslackware():
+                if self.isslackware():
                     self.save_cache_stock_slackfiles()
                     self.save_cache_sbofiles()
                     sys.exit(0)
@@ -272,6 +264,22 @@ class FindRevDep(object):
             else:
                 self.option_unknown()
                 sys.exit(2)
+
+    def ok_varlogpackages(self):
+        """ Returns True if /var/log/packages exists, else False """
+
+        if os.path.isdir(self.pkg_install_dir):
+            return True
+        else:
+            return False
+
+    def isslackware(self):
+        """ Returns True if we are on Slackware, else False """
+
+        if os.path.exists(self.slackdistro):
+            return True
+        else:
+            return False
 
     def get_libdir(self):
         """ Returns directories contained in /etc/ld.so.conf and
@@ -562,7 +570,7 @@ class FindRevDep(object):
 
         if not os.path.exists(self.dbdir):
             os.mkdir(self.dbdir)
-        pckfile = open(os.path.join(self.dbdir, self.slkdb), "wb")
+        pckfile = open(os.path.join(self.dbdir, self.sbodb), "wb")
         dlistsbopkg = self.convert_sbopkgdirs_in_list()
         pickle.dump(dlistsbopkg, pckfile, protocol=2)
         pckfile.close()
@@ -579,14 +587,20 @@ class FindRevDep(object):
             fatal_error("SBo package cache file not found, you need to " \
                         "build it using '-c' or '--cachepkg' option.")        
 
+    def find_sbo_package(self, missinglib):
+        """ Returns name of SlackBuilds.org package whom missinglib MAY
+            belong to --> str
+        """
+        
+        listpkgfiles = self.load_sbo_pkgs()
+        rtnval = None
+        for singpkg in listpkgfiles:
+            result = re.search(singpkg, missinglib, re.IGNORECASE)
+            if result:
+                rtnval = singpkg
+                break
+        return rtnval
 
-    def ok_varlogpackages(self):
-        """ Returns True if /var/log/packages exists, else False """
-
-        if os.path.isdir(self.pkg_install_dir):
-            return True
-        else:
-            return False
 
     def find_similar_solib(self, solib):
         """ Returns if an already existing shared object library has a name
