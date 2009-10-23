@@ -111,9 +111,9 @@ def get_env_ldlib():
     if raw_ldlib_env_var:
         # if env var doesn't exist
         list_ldlib = raw_ldlib_env_var.split(":")
-        for bbb in list_ldlib:
-            if bbb not in unique_list_ldlib:
-                unique_list_ldlib.append(bbb)
+        for singdir in list_ldlib:
+            if singdir not in unique_list_ldlib:
+                unique_list_ldlib.append(singdir)
     return unique_list_ldlib
 
 
@@ -291,13 +291,19 @@ class FindRevDep(object):
         handl.close()
         raw_list_libdir2 = get_env_ldlib()
         raw_list_libdir.extend(raw_list_libdir2)
+        # generic libs may be postulated by the system, and not in ld.so.conf
+        generic_libs = ["/usr/lib", "/usr/lib32", "/usr/lib64"]
+        for singgen in generic_libs:
+            if singgen not in raw_list_libdir:
+                if os.path.exists(singgen):
+                    raw_list_libdir.append(singgen)
         list_libdir = []
-        for ccc in raw_list_libdir:
-            ccc = ccc.strip()
-            if not ccc.startswith("#"):
-                if ccc not in list_libdir:
-                    if not os.path.islink(ccc):
-                        list_libdir.append(ccc)
+        for singlib in raw_list_libdir:
+            singlib = singlib.strip()
+            if not singlib.startswith("#"):
+                if singlib not in list_libdir:
+                    if not os.path.islink(singlib):
+                        list_libdir.append(singlib)
         return list_libdir
 
     def find_nomasked_files(self, forbidpattern, basedir='.'):
@@ -305,16 +311,21 @@ class FindRevDep(object):
             name starting from 'basedir' -> list
         """
 
-        matching = forbidfiles = []
+        listmatching = forbidfiles = []
         files = find_common_files(basedir)
-        for fff in files:
-            for singlpattern in forbidpattern:
-                regexpr = re.compile(singlpattern)
-                if regexpr.match(fff):
-                    forbidfiles.append(fff)
-                if fff not in forbidfiles:
-                    matching.append(fff)
-        return matching
+        for singfile in files:
+            if multi_match_fileext(forbidpattern, singfile):
+                # found forbidden pattern, ignore
+                continue
+            else:
+                listmatching.append(singfile)
+        """    for singlpattern in forbidpattern:
+                if re.search(singlpattern, singfile):
+                    forbidfiles.append(singfile)
+                if singfile not in forbidfiles:
+                    listmatching.append(singfile)
+        """
+        return listmatching
 
     def find_lib_files(self):
         """ Returns all shared object library files -> list """
@@ -591,16 +602,16 @@ class FindRevDep(object):
         """ Returns name of SlackBuilds.org package whom missinglib MAY
             belong to --> str
         """
-        
+
+        lmissinglib = missinglib.lower()
         listpkgfiles = self.load_sbo_pkgs()
         rtnval = None
         for singpkg in listpkgfiles:
-            result = re.search(singpkg, missinglib, re.IGNORECASE)
-            if result:
+            lsingpkg = singpkg.lower()
+            if lmissinglib.find(lsingpkg) != -1:
                 rtnval = singpkg
                 break
         return rtnval
-
 
     def find_similar_solib(self, solib):
         """ Returns if an already existing shared object library has a name
@@ -649,15 +660,17 @@ class FindRevDep(object):
         if slkpackagename1 is not None:
             # if it's a stock slackware package
             slkpackagename2 = self.find_stock_package(brokendep)
-            return os.path.basename(slkpackagename2)
+            if slkpackagename2 is not None:
+                return os.path.basename(slkpackagename2)
+                # package is missing dependency lib
+        sbopackagename1 = self.find_sbo_package(brokendep)
+        if sbopackagename1 is not None:
+            return os.path.basename(sbopackagename1)
             # package is missing dependency lib
-        temp = 1
-        if temp:
-            pass
         othpackagename = self.find_other_package(brokenfile)
-        return os.path.basename(othpackagename)
-        # package is broken dependency bin/lib
-        
+        if othpackagename is not None:
+            return os.path.basename(othpackagename)
+            # package is broken dependency bin/lib
 
     def reset_log(self):
         """ Erases the log file and re-create it"""
