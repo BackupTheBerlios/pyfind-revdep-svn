@@ -311,7 +311,7 @@ class FindRevDep(object):
             name starting from 'basedir' -> list
         """
 
-        listmatching = forbidfiles = []
+        listmatching = []
         files = find_common_files(basedir)
         for singfile in files:
             if multi_match_fileext(forbidpattern, singfile):
@@ -319,12 +319,6 @@ class FindRevDep(object):
                 continue
             else:
                 listmatching.append(singfile)
-        """    for singlpattern in forbidpattern:
-                if re.search(singlpattern, singfile):
-                    forbidfiles.append(singfile)
-                if singfile not in forbidfiles:
-                    listmatching.append(singfile)
-        """
         return listmatching
 
     def find_lib_files(self):

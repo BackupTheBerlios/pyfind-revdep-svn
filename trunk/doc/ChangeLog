@@ -1,3 +1,6 @@
+    Introduce more reliable package prediction for slackware stock
+     packages and SlackBuild.org compiled ones. Minor bugfixes.
+
 0.2.4 (2009-10-15):
     Introduced options for help and version, and to enable/disable logfile
      and package prediction.
