@@ -22,8 +22,6 @@ distutils.core.setup(name = 'pyfind_revdep',
                      data_files=[('doc/pyfind_revdep-'+pyfind_revdep.__version__, \
                                   ['doc/ChangeLog', \
                                   'doc/gpl.txt', 'doc/INSTALL', \
-                                  'doc/README', 'doc/TODO' \
+                                  'doc/README', 'doc/TODO', \
                                   'doc/package-prediction.txt'])],
                      )
-
-
